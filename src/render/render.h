@@ -1,5 +1,5 @@
 // Aseprite Render Library
-// Copyright (c) 2019-2022 Igara Studio S.A.
+// Copyright (c) 2019-2023 Igara Studio S.A.
 // Copyright (c) 2001-2018 David Capello
 //
 // This file is released under the terms of the MIT license.
@@ -9,10 +9,10 @@
 #define RENDER_RENDER_H_INCLUDED
 #pragma once
 
-#include "doc/doc.h"
 #include "doc/anidir.h"
 #include "doc/blend_mode.h"
 #include "doc/color.h"
+#include "doc/doc.h"
 #include "doc/frame.h"
 #include "doc/pixel_format.h"
 #include "gfx/clip.h"
@@ -167,8 +167,7 @@ namespace render {
       const CompositeImageFunc compositeImage,
       const bool render_background,
       const bool render_transparent,
-      const BlendMode blendMode,
-      bool isSelected);
+      const BlendMode blendMode);
 
     void renderCel(
       Image* dst_image,

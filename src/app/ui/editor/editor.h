@@ -90,15 +90,13 @@ namespace app {
       kShowDecorators = 16,
       kShowSymmetryLine = 32,
       kShowSlices = 64,
-      kUseNonactiveLayersOpacityWhenEnabled = 128,
       kDefaultEditorFlags = (kShowGrid |
                              kShowMask |
                              kShowOnionskin |
                              kShowOutside |
                              kShowDecorators |
                              kShowSymmetryLine |
-                             kShowSlices |
-                             kUseNonactiveLayersOpacityWhenEnabled)
+                             kShowSlices)
     };
 
     enum class ZoomBehavior {
@@ -398,6 +396,8 @@ namespace app {
     void invalidateIfActive();
     void updateAutoCelGuides(ui::Message* msg);
 
+    int otherLayersOpacity() const;
+
     // Stack of states. The top element in the stack is the current state (m_state).
     EditorStatesHistory m_statesHistory;
     EditorStatesHistory m_deletedStates;
@@ -450,6 +450,10 @@ namespace app {
 
     DocView* m_docView;
 
+    // Last known mouse position received by this editor when the
+    // mouse button was pressed. Used for auto-scrolling. To get the
+    // current mouse position on the editor you can use
+    // ui::Display::lastMousePos().
     gfx::Point m_oldPos;
 
     EditorFlags m_flags;

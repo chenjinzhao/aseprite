@@ -383,7 +383,7 @@ void Editor::setLayer(const Layer* layer)
         // If the user want to see the active layer edges...
         m_docPref.show.layerEdges() ||
         // If there is a different opacity for nonactive-layers
-        Preferences::instance().experimental.nonactiveLayersOpacity() < 255 ||
+        otherLayersOpacity() < 255 ||
         // If the automatic cel guides are visible...
         m_showGuidesThisCel ||
         // If grid settings changed
@@ -672,10 +672,7 @@ void Editor::drawOneSpriteUnclippedRect(ui::Graphics* g, const gfx::Rect& sprite
     m_renderEngine->setNewBlendMethod(pref.experimental.newBlend());
     m_renderEngine->setRefLayersVisiblity(true);
     m_renderEngine->setSelectedLayer(m_layer);
-    if (m_flags & Editor::kUseNonactiveLayersOpacityWhenEnabled)
-      m_renderEngine->setNonactiveLayersOpacity(pref.experimental.nonactiveLayersOpacity());
-    else
-      m_renderEngine->setNonactiveLayersOpacity(255);
+    m_renderEngine->setNonactiveLayersOpacity(otherLayersOpacity());
     m_renderEngine->setupBackground(m_document, IMAGE_RGB);
     m_renderEngine->disableOnionskin();
 
@@ -2033,7 +2030,7 @@ bool Editor::onProcessMessage(Message* msg)
     case kKeyDownMessage:
 #if ENABLE_DEVMODE
       // Switch renderer
-      if (!msg->ctrlPressed() &&
+      if (msg->modifiers() == 0 &&
           static_cast<KeyMessage*>(msg)->scancode() == kKeyF1) {
         // TODO replace this experimental flag with a new enum (or
         //      maybe there is no need for user option now that the
@@ -2078,13 +2075,13 @@ bool Editor::onProcessMessage(Message* msg)
       }
 #endif  // ENABLE_DEVMODE
 
-      if (m_sprite) {
+      if (m_sprite && (isActive() || hasMouse())) {
         EditorStatePtr holdState(m_state);
         bool used = m_state->onKeyDown(this, static_cast<KeyMessage*>(msg));
 
-        updateToolLoopModifiersIndicators();
-        updateAutoCelGuides(msg);
         if (hasMouse()) {
+          updateToolLoopModifiersIndicators();
+          updateAutoCelGuides(msg);
           updateQuicktool();
           setCursor(mousePosInDisplay());
         }
@@ -2095,13 +2092,13 @@ bool Editor::onProcessMessage(Message* msg)
       break;
 
     case kKeyUpMessage:
-      if (m_sprite) {
+      if (m_sprite && (isActive() || hasMouse())) {
         EditorStatePtr holdState(m_state);
         bool used = m_state->onKeyUp(this, static_cast<KeyMessage*>(msg));
 
-        updateToolLoopModifiersIndicators();
-        updateAutoCelGuides(msg);
         if (hasMouse()) {
+          updateToolLoopModifiersIndicators();
+          updateAutoCelGuides(msg);
           updateQuicktool();
           setCursor(mousePosInDisplay());
         }
@@ -2418,7 +2415,8 @@ bool Editor::canDraw()
           m_layer->isImage() &&
           m_layer->isVisibleHierarchy() &&
           m_layer->isEditableHierarchy() &&
-          !m_layer->isReference());
+          !m_layer->isReference() &&
+          !m_document->isReadOnly());
 }
 
 bool Editor::isInsideSelection()
@@ -2977,9 +2975,18 @@ void Editor::updateAutoCelGuides(ui::Message* msg)
   }
 }
 
+int Editor::otherLayersOpacity() const
+{
+  if (m_docView && m_docView->isPreview())
+    return Preferences::instance().experimental.nonactiveLayersOpacityPreview();
+  else
+    return Preferences::instance().experimental.nonactiveLayersOpacity();
+}
+
 // static
 void Editor::registerCommands()
 {
+  // TODO merge with ToggleOtherLayersOpacity
   Commands::instance()
     ->add(
       new QuickCommand(

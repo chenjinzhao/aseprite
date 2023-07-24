@@ -18,6 +18,7 @@
 #include "app/pref/preferences.h"
 #include "app/script/blend_mode.h"
 #include "app/script/luacpp.h"
+#include "app/script/require.h"
 #include "app/script/security.h"
 #include "app/sprite_sheet_type.h"
 #include "app/tilemap_mode.h"
@@ -27,6 +28,7 @@
 #include "base/file_handle.h"
 #include "base/fs.h"
 #include "base/fstream_path.h"
+#include "doc/algorithm/flip_type.h"
 #include "doc/anidir.h"
 #include "doc/color_mode.h"
 #include "filters/target.h"
@@ -152,6 +154,7 @@ void register_app_pixel_color_object(lua_State* L);
 void register_app_fs_object(lua_State* L);
 void register_app_command_object(lua_State* L);
 void register_app_preferences_object(lua_State* L);
+void register_json_object(lua_State* L);
 
 void register_brush_class(lua_State* L);
 void register_cel_class(lua_State* L);
@@ -160,7 +163,9 @@ void register_color_class(lua_State* L);
 void register_color_space_class(lua_State* L);
 #ifdef ENABLE_UI
 void register_dialog_class(lua_State* L);
+void register_editor_class(lua_State* L);
 void register_graphics_context_class(lua_State* L);
+void register_window_class(lua_State* L);
 #endif
 void register_events_class(lua_State* L);
 void register_frame_class(lua_State* L);
@@ -217,16 +222,7 @@ Engine::Engine()
 #endif
 
   // Standard Lua libraries
-  luaL_requiref(L, LUA_GNAME, luaopen_base, 1);
-  luaL_requiref(L, LUA_COLIBNAME, luaopen_coroutine, 1);
-  luaL_requiref(L, LUA_TABLIBNAME, luaopen_table, 1);
-  luaL_requiref(L, LUA_IOLIBNAME, luaopen_io, 1);
-  luaL_requiref(L, LUA_OSLIBNAME, luaopen_os, 1);
-  luaL_requiref(L, LUA_STRLIBNAME, luaopen_string, 1);
-  luaL_requiref(L, LUA_MATHLIBNAME, luaopen_math, 1);
-  luaL_requiref(L, LUA_UTF8LIBNAME, luaopen_utf8, 1);
-  luaL_requiref(L, LUA_DBLIBNAME, luaopen_debug, 1);
-  lua_pop(L, 9);
+  luaL_openlibs(L);
 
   // Overwrite Lua functions
   lua_register(L, "print", print);
@@ -255,15 +251,26 @@ Engine::Engine()
   lua_setfield(L, -2, "execute");
   lua_pop(L, 1);
 
+  // Wrap package.loadlib()
+  lua_getglobal(L, "package");
+  lua_getfield(L, -1, "loadlib");
+  lua_pushcclosure(L, secure_package_loadlib, 1);
+  lua_setfield(L, -2, "loadlib");
+  lua_pop(L, 1);
+
+  // Enhance require() function for plugins
+  custom_require_function(L);
+
   // Generic code used by metatables
   run_mt_index_code(L);
 
-  // Register global app object
+  // Register global objects (app, json)
   register_app_object(L);
   register_app_pixel_color_object(L);
   register_app_fs_object(L);
   register_app_command_object(L);
   register_app_preferences_object(L);
+  register_json_object(L);
 
   // Register constants
   lua_newtable(L);
@@ -453,6 +460,13 @@ Engine::Engine()
   setfield_integer(L, "INTERSECT", (int)gen::SelectionMode::INTERSECT);
   lua_pop(L, 1);
 
+  lua_newtable(L);
+  lua_pushvalue(L, -1);
+  lua_setglobal(L, "FlipType");
+  setfield_integer(L, "HORIZONTAL", doc::algorithm::FlipType::FlipHorizontal);
+  setfield_integer(L, "VERTICAL",   doc::algorithm::FlipType::FlipVertical);
+  lua_pop(L, 1);
+
   // Register classes/prototypes
   register_brush_class(L);
   register_cel_class(L);
@@ -461,7 +475,9 @@ Engine::Engine()
   register_color_space_class(L);
 #ifdef ENABLE_UI
   register_dialog_class(L);
+  register_editor_class(L);
   register_graphics_context_class(L);
+  register_window_class(L);
 #endif
   register_events_class(L);
   register_frame_class(L);
@@ -499,7 +515,7 @@ Engine::Engine()
   register_version_class(L);
 #if ENABLE_WEBSOCKET
   register_websocket_class(L);
- #endif
+#endif
 
   // Check that we have a clean start (without dirty in the stack)
   ASSERT(lua_gettop(L) == top);
@@ -579,7 +595,7 @@ bool Engine::evalFile(const std::string& filename,
   }
   std::string absFilename = base::get_absolute_path(filename);
 
-  AddScriptFilename add(absFilename);
+  AddScriptFilename addScript(absFilename);
   set_app_params(L, params);
 
   if (g_debuggerDelegate)
@@ -591,6 +607,18 @@ bool Engine::evalFile(const std::string& filename,
     g_debuggerDelegate->endFile(absFilename);
 
   return result;
+}
+
+bool Engine::evalUserFile(const std::string& filename,
+                          const Params& params)
+{
+  // Set the _SCRIPT_PATH global so require() can find .lua files from
+  // the script path.
+  std::string path =
+    base::get_file_path(
+      base::get_absolute_path(filename));
+  SetScriptForRequire setScript(L, path.c_str());
+  return evalFile(filename, params);
 }
 
 void Engine::startDebugger(DebuggerDelegate* debuggerDelegate)
